@@ -7,7 +7,6 @@ const api = axios.create({
   },
 });
 
-// Interceptor para injetar o token JWT de autenticação em todas as requisições
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {

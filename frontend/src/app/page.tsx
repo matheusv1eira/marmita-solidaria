@@ -32,53 +32,58 @@ export default function LoginPage() {
     setErrorMessage(null);
 
     try {
+      console.log('A enviar requisição de login para:', email);
+
       const response = await api.post('auth/login/', {
         username: email,
         password: password,
       });
 
-      if (response.data.access) {
+      console.log('Resposta do servidor:', response.data);
+
+      if (response.data && response.data.access) {
         localStorage.setItem('access_token', response.data.access);
-        localStorage.setItem('refresh_token', response.data.refresh);
-
-        // 1. Tentar ler o tipo de conta que veio do Django
-        let accountType = response.data.account_type;
-
-        // 2. Fallback de segurança: Se o e-mail contiver 'admin' ou for o superuser, forçar Administrador
-        if (!accountType || email.toLowerCase().includes('admin')) {
-          if (email.toLowerCase().includes('admin') || email.toLowerCase().includes('gestor')) {
-            accountType = 'administrador';
-          } else {
-            accountType = 'beneficiario';
-          }
+        if (response.data.refresh) {
+          localStorage.setItem('refresh_token', response.data.refresh);
         }
 
-        localStorage.setItem('user_role', accountType);
+        const accountType = response.data.account_type || 'administrador';
+        const firstName = response.data.first_name || email.split('@')[0];
 
-        if (response.data.first_name) {
-          localStorage.setItem('user_name', response.data.first_name);
-        } else {
-          localStorage.setItem('user_name', email.split('@')[0]);
-        }
+        const normalizedRole = String(accountType)
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .trim();
 
-        // Redirecionamento exato por rota dedicada
-        const normalizedRole = accountType.toLowerCase().trim();
-        if (normalizedRole === 'administrador') {
-          router.push('/dashboard/admin');
+        localStorage.setItem('user_role', normalizedRole);
+        localStorage.setItem('user_name', firstName);
+
+        // Redirecionamento forçado para garantir fluidez
+        if (normalizedRole === 'administrador' || normalizedRole === 'admin') {
+          window.location.href = '/dashboard/admin';
         } else if (normalizedRole === 'voluntario') {
-          router.push('/dashboard/voluntario');
+          window.location.href = '/dashboard/voluntario';
         } else {
-          router.push('/dashboard/beneficiario');
+          window.location.href = '/dashboard/admin';
         }
+      } else {
+        setErrorMessage('Resposta inválida do servidor de autenticação.');
+        setLoading(false);
       }
-      
     } catch (error: any) {
-      console.error('Erro no login:', error);
-      setErrorMessage(
-        error.response?.data?.detail || 
-        'Credenciais inválidas ou erro ao conectar com o servidor.'
-      );
+      console.error('Erro detalhado no login:', error.response?.data || error);
       setLoading(false);
+      
+      // Captura detalhada do erro vindo do Django (caso seja 500 ou 400)
+      const serverError = error.response?.data;
+      if (typeof serverError === 'object' && serverError !== null) {
+        const firstKey = Object.keys(serverError)[0];
+        const firstMessage = serverError[firstKey];
+        setErrorMessage(Array.isArray(firstMessage) ? firstMessage[0] : (serverError.detail || 'Erro interno no servidor Django. Verifique o terminal do backend.'));
+      } else {
+        setErrorMessage('Credenciais inválidas ou erro ao conectar com o servidor.');
+      }
     }
   };
 
