@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '../services/api';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/services/api';
 import { 
   Heart, 
   Shield, 
@@ -20,8 +21,9 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -32,23 +34,19 @@ export default function LoginPage() {
     setErrorMessage(null);
 
     try {
-      console.log('A enviar requisição de login para:', email);
+      console.log('A enviar requisição de login para:', emailOrUsername);
 
       const response = await api.post('auth/login/', {
-        username: email,
+        username: emailOrUsername,
         password: password,
       });
 
       console.log('Resposta do servidor:', response.data);
 
       if (response.data && response.data.access) {
-        localStorage.setItem('access_token', response.data.access);
-        if (response.data.refresh) {
-          localStorage.setItem('refresh_token', response.data.refresh);
-        }
-
-        const accountType = response.data.account_type || 'administrador';
-        const firstName = response.data.first_name || email.split('@')[0];
+        const { access, refresh, account_type, first_name } = response.data;
+        const accountType = account_type || 'administrador';
+        const firstName = first_name || emailOrUsername.split('@')[0];
 
         const normalizedRole = String(accountType)
           .toLowerCase()
@@ -56,33 +54,43 @@ export default function LoginPage() {
           .replace(/[\u0300-\u036f]/g, "")
           .trim();
 
-        localStorage.setItem('user_role', normalizedRole);
-        localStorage.setItem('user_name', firstName);
-
-        // Redirecionamento forçado para garantir fluidez
-        if (normalizedRole === 'administrador' || normalizedRole === 'admin') {
-          window.location.href = '/dashboard/admin';
-        } else if (normalizedRole === 'voluntario') {
-          window.location.href = '/dashboard/voluntario';
-        } else {
-          window.location.href = '/dashboard/admin';
-        }
+        // Submete os dados validados ao contexto global de autenticação
+        login(access, refresh || '', {
+          username: firstName,
+          email: emailOrUsername,
+          role: normalizedRole,
+        });
       } else {
         setErrorMessage('Resposta inválida do servidor de autenticação.');
         setLoading(false);
       }
     } catch (error: any) {
-      console.error('Erro detalhado no login:', error.response?.data || error);
       setLoading(false);
-      
-      // Captura detalhada do erro vindo do Django (caso seja 500 ou 400)
-      const serverError = error.response?.data;
-      if (typeof serverError === 'object' && serverError !== null) {
-        const firstKey = Object.keys(serverError)[0];
-        const firstMessage = serverError[firstKey];
-        setErrorMessage(Array.isArray(firstMessage) ? firstMessage[0] : (serverError.detail || 'Erro interno no servidor Django. Verifique o terminal do backend.'));
+      console.error('Erro detalhado no login:', error);
+
+      if (error.response) {
+        // O servidor respondeu com um código de erro HTTP (400, 401, 500, etc.)
+        const serverError = error.response.data;
+        console.error('Payload do erro do servidor:', serverError);
+
+        if (typeof serverError === 'object' && serverError !== null) {
+          const firstKey = Object.keys(serverError)[0];
+          const firstMessage = serverError[firstKey];
+          setErrorMessage(
+            Array.isArray(firstMessage)
+              ? firstMessage[0]
+              : (serverError.detail || serverError.error || 'Credenciais inválidas ou erro no servidor.')
+          );
+        } else {
+          setErrorMessage('Erro de autenticação no servidor Django.');
+        }
+      } else if (error.request) {
+        // A requisição foi feita mas não houve resposta (Backend Django offline ou CORS)
+        console.error('Sem resposta do servidor:', error.request);
+        setErrorMessage('Não foi possível conectar ao servidor Django. Verifique se o backend está ativo em http://127.0.0.1:8000/');
       } else {
-        setErrorMessage('Credenciais inválidas ou erro ao conectar com o servidor.');
+        // Erro inesperado ao configurar a requisição
+        setErrorMessage(`Ocorreu um erro inesperado: ${error.message}`);
       }
     }
   };
@@ -185,7 +193,7 @@ export default function LoginPage() {
           </div>
 
           {errorMessage && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded-xl font-medium">
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded-xl font-medium animate-fadeIn">
               {errorMessage}
             </div>
           )}
@@ -193,7 +201,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                E-mail ou utilizador
+                Utilizador ou E-mail
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -202,9 +210,9 @@ export default function LoginPage() {
                 <input 
                   type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="seu@email.com"
+                  value={emailOrUsername}
+                  onChange={(e) => setEmailOrUsername(e.target.value)}
+                  placeholder="matheus ou seu@email.com"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#16A36A]/20 focus:border-[#16A36A] transition-all"
                 />
               </div>

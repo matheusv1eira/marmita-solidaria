@@ -5,18 +5,29 @@ from .serializers import RegisterSerializer, CustomTokenObtainPairSerializer, Us
 
 User = get_user_model()
 
-# View para o Registo de Novos Utilizadores
 class RegisterView(generics.CreateAPIView):
+    """
+    Endpoint para o registo de novos utilizadores (beneficiários, voluntários ou administradores).
+    Permite salvar dados como CPF, telefone, foto em Base64 e tipo de conta.
+    """
     queryset = User.objects.all()
     permission_classes = (permissions.AllowAny,)
     serializer_class = RegisterSerializer
 
-# View para o Login Customizado (JWT)
+
 class CustomLoginView(TokenObtainPairView):
+    """
+    Endpoint de Autenticação JWT Customizado.
+    Retorna os tokens 'access' e 'refresh', além de dados úteis do utilizador logado.
+    """
     serializer_class = CustomTokenObtainPairSerializer
 
-# View para Listar e Gerir Utilizadores (Resolve o erro 404 em /api/auth/users/)
+
 class UserListView(generics.ListCreateAPIView):
-    queryset = User.objects.all()
+    """
+    Endpoint para Listar e Criar Utilizadores Reais.
+    Resolve o erro 404 em /api/auth/users/ e alimenta a tabela administrativa do Next.js.
+    """
+    queryset = User.objects.all().order_by('-date_joined')
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = UserSerializer
