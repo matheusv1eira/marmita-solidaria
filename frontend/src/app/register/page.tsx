@@ -195,7 +195,7 @@ export default function RegisterPage() {
       const baseURL = api.defaults.baseURL || 'http://127.0.0.1:8000/api/';
       const userKey = formData.username || formData.email;
 
-      // Envia os dados para o backend Django
+      // Envia os dados para o backend Django com o CPF formatado
       await axios.post(`${baseURL}auth/register/`, {
         username: userKey,
         email: formData.email,

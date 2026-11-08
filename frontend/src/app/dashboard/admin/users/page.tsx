@@ -26,13 +26,35 @@ interface RealUser {
   is_active: boolean;
 }
 
+// Função utilitária para formatar CPF dinamicamente (000.000.000-00)
+const formatCPF = (value?: string) => {
+  if (!value) return '';
+  const numbers = value.replace(/\D/g, '');
+  return numbers
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+};
+
+// Função utilitária para formatar Telefone dinamicamente ((00) 00000-0000 ou (00) 0000-0000)
+const formatPhone = (value?: string) => {
+  if (!value) return '';
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length === 11) {
+    return numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  } else if (numbers.length === 10) {
+    return numbers.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  }
+  return value; // Retorna original se não bater com os tamanhos padrão
+};
+
 export default function UtilizadoresReaisPage() {
   const [users, setUsers] = useState<RealUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('all');
 
-  useEffect(() => {
+   useEffect(() => {
     fetchUsers();
   }, []);
 
@@ -139,8 +161,8 @@ export default function UtilizadoresReaisPage() {
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredUsers.map((user) => {
                 const fotoPerfil = user.profile_image || user.photo || user.foto || user.image;
-                const cpfUser = user.cpf || user.documento || user.nu_cpf || user.nuDocumento;
-                const telefoneUser = user.telefone || user.phone || user.celular;
+                const rawCpf = user.cpf || user.documento || user.nu_cpf || user.nuDocumento;
+                const rawTelefone = user.telefone || user.phone || user.celular;
                 const nomeExibicao = user.first_name || user.username;
 
                 return (
@@ -161,24 +183,24 @@ export default function UtilizadoresReaisPage() {
                       </div>
                     </td>
                     
-                    {/* Coluna 2: CPF / Documento */}
+                    {/* Coluna 2: CPF / Documento Formatado */}
                     <td className="p-4 text-slate-700 font-mono text-xs">
-                      {cpfUser ? (
+                      {rawCpf ? (
                         <div className="inline-flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg font-semibold text-slate-800 border border-slate-200">
                           <FileText className="w-3.5 h-3.5 text-[#16A36A]" />
-                          <span>{cpfUser}</span>
+                          <span>{formatCPF(rawCpf)}</span>
                         </div>
                       ) : (
                         <span className="text-slate-400 italic">Não informado</span>
                       )}
                     </td>
 
-                    {/* Coluna 3: Telefone / Contacto */}
+                    {/* Coluna 3: Telefone / Contacto Formatado */}
                     <td className="p-4 text-slate-700 font-mono text-xs">
-                      {telefoneUser ? (
+                      {rawTelefone ? (
                         <div className="flex items-center gap-1.5">
                           <Phone className="w-3.5 h-3.5 text-[#16A36A]" />
-                          <span>{telefoneUser}</span>
+                          <span>{formatPhone(rawTelefone)}</span>
                         </div>
                       ) : (
                         <span className="text-slate-400 italic">Não informado</span>
