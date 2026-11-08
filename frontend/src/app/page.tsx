@@ -44,7 +44,7 @@ export default function LoginPage() {
       console.log('Resposta do servidor:', response.data);
 
       if (response.data && response.data.access) {
-        const { access, refresh, account_type, first_name } = response.data;
+        const { access, refresh, account_type, first_name, profile_image } = response.data;
         const accountType = account_type || 'administrador';
         const firstName = first_name || emailOrUsername.split('@')[0];
 
@@ -54,11 +54,30 @@ export default function LoginPage() {
           .replace(/[\u0300-\u036f]/g, "")
           .trim();
 
+        const userKey = emailOrUsername.trim().toLowerCase();
+
+        // Recupera a foto exclusiva deste utilizador (da API ou salva no registo local)
+        const uniquePhoto = profile_image || 
+                            localStorage.getItem(`profile_image_${userKey}`) || 
+                            localStorage.getItem(`profile_image_${firstName}`) || '';
+
+        // Salva as referências de sessão exclusivas
+        localStorage.setItem('current_user_key', userKey);
+        localStorage.setItem('user_name', firstName);
+        localStorage.setItem('user_role', normalizedRole);
+
+        if (uniquePhoto) {
+          localStorage.setItem('profile_image', uniquePhoto);
+        } else {
+          localStorage.removeItem('profile_image');
+        }
+
         // Submete os dados validados ao contexto global de autenticação
         login(access, refresh || '', {
           username: firstName,
           email: emailOrUsername,
           role: normalizedRole,
+          profile_image: uniquePhoto,
         });
       } else {
         setErrorMessage('Resposta inválida do servidor de autenticação.');
@@ -69,11 +88,13 @@ export default function LoginPage() {
       console.error('Erro detalhado no login:', error);
 
       if (error.response) {
-        // O servidor respondeu com um código de erro HTTP (400, 401, 500, etc.)
+        const status = error.response.status;
         const serverError = error.response.data;
         console.error('Payload do erro do servidor:', serverError);
 
-        if (typeof serverError === 'object' && serverError !== null) {
+        if (status === 400 || status === 401 || status === 403) {
+          setErrorMessage('Utilizador ou senha incorretos. Por favor, verifique suas credenciais.');
+        } else if (typeof serverError === 'object' && serverError !== null) {
           const firstKey = Object.keys(serverError)[0];
           const firstMessage = serverError[firstKey];
           setErrorMessage(
@@ -85,11 +106,9 @@ export default function LoginPage() {
           setErrorMessage('Erro de autenticação no servidor Django.');
         }
       } else if (error.request) {
-        // A requisição foi feita mas não houve resposta (Backend Django offline ou CORS)
         console.error('Sem resposta do servidor:', error.request);
         setErrorMessage('Não foi possível conectar ao servidor Django. Verifique se o backend está ativo em http://127.0.0.1:8000/');
       } else {
-        // Erro inesperado ao configurar a requisição
         setErrorMessage(`Ocorreu um erro inesperado: ${error.message}`);
       }
     }

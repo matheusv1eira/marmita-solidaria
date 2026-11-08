@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import api from '../../../../services/api';
+import { compressImage } from '@/utils/imageCompressor';
 import { 
   Settings, 
   User, 
@@ -9,16 +11,12 @@ import {
   Bell, 
   Sliders, 
   Save, 
-  CheckCircle2, 
-  AlertTriangle, 
   Loader2,
   Clock
 } from 'lucide-react';
 
 export default function AdminConfiguracoesPage() {
   const [saving, setSaving] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Estados do Perfil
   const [userName, setUserName] = useState('');
@@ -40,7 +38,7 @@ export default function AdminConfiguracoesPage() {
 
   useEffect(() => {
     const loadAdminData = async () => {
-      const storedName = localStorage.getItem('user_name') || localStorage.getItem('first_name') || 'matheus';
+      const storedName = localStorage.getItem('user_name') || localStorage.getItem('first_name') || 'Matheus';
       const storedEmail = localStorage.getItem('user_email') || 'matheusvieira1417@gmail.com';
       
       let storedPhoto = localStorage.getItem('profile_image') || 
@@ -51,7 +49,7 @@ export default function AdminConfiguracoesPage() {
       setUserName(storedName);
       setUserEmail(storedEmail);
 
-      // Se não houver foto no localStorage, tenta buscar na API de utilizadores reais (onde a foto do Matheus aparece)
+      // Se não houver foto no localStorage, tenta buscar na API de utilizadores reais
       if (!storedPhoto || storedPhoto === 'null') {
         try {
           const response = await api.get(`auth/users/?search=${storedName}`);
@@ -74,29 +72,31 @@ export default function AdminConfiguracoesPage() {
     loadAdminData();
   }, []);
 
-  // Manipulador de upload de ficheiro (Converte para Base64 e guarda em todas as chaves)
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Manipulador de upload de ficheiro otimizado com compressão via Canvas (< 100KB)
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64Photo = reader.result as string;
-        setUserPhoto(base64Photo);
+      try {
+        // Comprime a imagem antes de aplicar ao estado e ao localStorage
+        const optimizedBase64 = await compressImage(file, 400, 400, 0.75);
+        setUserPhoto(optimizedBase64);
         
-        localStorage.setItem('profile_image', base64Photo);
-        localStorage.setItem('user_photo', base64Photo);
-        localStorage.setItem('photo', base64Photo);
-        localStorage.setItem('foto', base64Photo);
-      };
-      reader.readAsDataURL(file);
+        localStorage.setItem('profile_image', optimizedBase64);
+        localStorage.setItem('user_photo', optimizedBase64);
+        localStorage.setItem('photo', optimizedBase64);
+        localStorage.setItem('foto', optimizedBase64);
+
+        toast.success('Foto otimizada e aplicada com sucesso!');
+      } catch (error) {
+        console.error('Erro ao comprimir imagem de perfil:', error);
+        toast.error('Erro ao processar a imagem selecionada.');
+      }
     }
   };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setSuccessMessage(null);
-    setErrorMessage(null);
 
     try {
       localStorage.setItem('user_name', userName);
@@ -117,14 +117,21 @@ export default function AdminConfiguracoesPage() {
         console.warn('API de perfil indisponível. Dados salvos localmente.');
       }
 
-      setSuccessMessage('Configurações e foto de perfil atualizadas com sucesso!');
+      // Dispara o evento global para sincronizar a Sidebar/Avatar em tempo real
+      window.dispatchEvent(new Event('profileUpdated'));
+
+      toast.success('Configurações atualizadas com sucesso!', {
+        description: 'As alterações foram sincronizadas no sistema.',
+      });
       
       setTimeout(() => {
         window.location.reload();
       }, 1000);
 
     } catch (err) {
-      setErrorMessage('Erro ao guardar as alterações.');
+      toast.error('Erro ao guardar as alterações', {
+        description: 'Verifique os campos e tente novamente.',
+      });
     } finally {
       setSaving(false);
     }
@@ -144,21 +151,6 @@ export default function AdminConfiguracoesPage() {
         </p>
       </div>
 
-      {/* Alertas */}
-      {successMessage && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 text-xs font-bold shadow-sm">
-          <CheckCircle2 className="w-6 h-6 text-[#16A36A] shrink-0" />
-          <span>{successMessage}</span>
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3 text-xs font-bold shadow-sm">
-          <AlertTriangle className="w-6 h-6 shrink-0" />
-          <span>{errorMessage}</span>
-        </div>
-      )}
-
       <form onSubmit={handleSaveSettings} className="space-y-8">
         
         {/* SEÇÃO 1: PERFIL DO ADMINISTRADOR */}
@@ -170,7 +162,7 @@ export default function AdminConfiguracoesPage() {
 
           <div className="flex flex-col sm:flex-row items-center gap-6">
             
-            {/* Foto de Perfil Cadastrada (Exibe a imagem corretamente) */}
+            {/* Foto de Perfil Cadastrada */}
             <div className="relative group">
               <div className="w-24 h-24 rounded-full bg-slate-100 border-4 border-[#16A36A] overflow-hidden flex items-center justify-center text-slate-400 font-bold text-2xl shadow-md">
                 {userPhoto ? (

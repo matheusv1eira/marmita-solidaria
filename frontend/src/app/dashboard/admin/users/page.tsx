@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import api from '../../../../services/api';
 import { Users, Search, Shield, Heart, User, Loader2, CheckCircle2, Phone, FileText, Fingerprint } from 'lucide-react';
 
@@ -41,21 +42,26 @@ export default function UtilizadoresReaisPage() {
       const response = await api.get('auth/users/');
       const data = response.data.results || response.data;
       
-      // LOG DE DIAGNÓSTICO PROFISSIONAL: Abre o F12 e verifica a tabela de utilizadores no console
+      // LOG DE DIAGNÓSTICO PROFISSIONAL
       console.table(data); 
       
       setUsers(Array.isArray(data) ? data : []);
+      toast.success('Lista de utilizadores sincronizada!');
     } catch (error) {
       console.error('Erro ao carregar utilizadores do servidor:', error);
+      toast.error('Erro ao carregar os utilizadores do servidor.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleAddBiometry = (userId: number, userName: string) => {
-    // Ação pronta para integração com leitor biométrico ou endpoint do Django
     console.log(`Registar biometria para o utilizador ID: ${userId} (${userName})`);
-    alert(`Funcionalidade de Biometria para: ${userName}\nPronto para integrar com o endpoint de captura biométrica.`);
+    
+    // Notificação elegante com Sonner em substituição ao alert nativo
+    toast.success(`Módulo Biométrico: ${userName}`, {
+      description: `Utilizador ID ${userId} pronto para captura facial/biométrica.`,
+    });
   };
 
   const filteredUsers = users.filter((u) => {

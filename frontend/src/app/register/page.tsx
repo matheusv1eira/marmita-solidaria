@@ -2,12 +2,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import axios from 'axios';
 import api from '../../services/api';
+import { compressImage } from '@/utils/imageCompressor';
 import { 
   Heart, 
   Shield, 
   Box, 
-  TrendingUp, 
   CheckCircle2, 
   Mail, 
   Lock, 
@@ -112,8 +114,8 @@ export default function RegisterPage() {
     setCameraActive(false);
   };
 
-  // Capturar foto
-  const capturePhoto = () => {
+  // Capturar e Comprimir a foto automaticamente
+  const capturePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -124,7 +126,18 @@ export default function RegisterPage() {
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg');
-        setProfileImage(dataUrl);
+        
+        try {
+          const res = await fetch(dataUrl);
+          const blob = await res.blob();
+          const file = new File([blob], 'perfil.jpg', { type: 'image/jpeg' });
+          const optimizedBase64 = await compressImage(file, 400, 400, 0.75);
+          setProfileImage(optimizedBase64);
+        } catch (err) {
+          console.error('Erro na compressão da imagem da webcam, usando original:', err);
+          setProfileImage(dataUrl);
+        }
+
         stopCamera();
       }
     }
@@ -160,8 +173,14 @@ export default function RegisterPage() {
       return;
     }
 
+    // Validação estrita de tamanho e regras de senha
+    if (formData.password.length < 6) {
+      setErrorMessage('A senha é muito curta. Deve conter pelo menos 6 dígitos/carateres.');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
-      setErrorMessage('As senhas não coincidem.');
+      setErrorMessage('As senhas não coincidem. Verifique os campos de senha.');
       return;
     }
 
@@ -173,8 +192,12 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await api.post('auth/register/', {
-        username: formData.username || formData.email,
+      const baseURL = api.defaults.baseURL || 'http://127.0.0.1:8000/api/';
+      const userKey = formData.username || formData.email;
+
+      // Envia os dados para o backend Django
+      await axios.post(`${baseURL}auth/register/`, {
+        username: userKey,
         email: formData.email,
         password: formData.password,
         first_name: formData.first_name,
@@ -182,18 +205,60 @@ export default function RegisterPage() {
         cpf: formData.cpf,
         account_type: formData.account_type,
         profile_image: profileImage,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
       });
 
-      alert('Conta criada com sucesso! Faça login para continuar.');
+      // Vincula a foto tirada exclusivamente a este utilizador no localStorage
+      if (profileImage) {
+        localStorage.setItem(`profile_image_${userKey}`, profileImage);
+      }
+
+      toast.success('Conta criada com sucesso!', {
+        description: 'Faça login com as suas credenciais para continuar.',
+      });
       router.push('/');
     } catch (error: any) {
       console.error('Erro no registo:', error);
-      const data = error.response?.data;
-      if (data) {
-        const firstKey = Object.keys(data)[0];
-        setErrorMessage(`Erro em ${firstKey}: ${JSON.stringify(data[firstKey])}`);
+      const serverError = error.response?.data;
+      const status = error.response?.status;
+
+      if (serverError) {
+        console.error('Payload do erro do servidor:', serverError);
+
+        if (typeof serverError === 'object' && serverError !== null) {
+          if (serverError.cpf) {
+            const msg = Array.isArray(serverError.cpf) ? serverError.cpf[0] : serverError.cpf;
+            setErrorMessage(`Este CPF já está a ser utilizado por outra conta no sistema. (${msg})`);
+          } else if (serverError.email) {
+            const msg = Array.isArray(serverError.email) ? serverError.email[0] : serverError.email;
+            setErrorMessage(`Este e-mail já está registado no sistema. (${msg})`);
+          } else if (serverError.username) {
+            const msg = Array.isArray(serverError.username) ? serverError.username[0] : serverError.username;
+            setErrorMessage(`Este nome de utilizador já existe. (${msg})`);
+          } else if (serverError.password) {
+            const msg = Array.isArray(serverError.password) ? serverError.password[0] : serverError.password;
+            setErrorMessage(`A senha não cumpre os requisitos do sistema: ${msg}`);
+          } else {
+            const firstKey = Object.keys(serverError)[0];
+            const firstMessage = serverError[firstKey];
+            setErrorMessage(
+              Array.isArray(firstMessage)
+                ? firstMessage[0]
+                : (serverError.detail || serverError.error || 'Erro ao realizar o registo. Verifique os dados preenchidos.')
+            );
+          }
+        } else {
+          setErrorMessage('Erro ao comunicar com o servidor.');
+        }
+      } else if (status === 401 || status === 400) {
+        setErrorMessage('Falha no registo. Verifique se o CPF, e-mail ou nome de utilizador já estão em uso.');
+      } else if (error.request) {
+        setErrorMessage('Não foi possível conectar ao servidor Django. Verifique se o backend está ativo.');
       } else {
-        setErrorMessage('Erro ao comunicar com o servidor.');
+        setErrorMessage(`Ocorreu um erro inesperado: ${error.message}`);
       }
     } finally {
       setLoading(false);
@@ -203,7 +268,7 @@ export default function RegisterPage() {
   return (
     <main className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-slate-50 font-sans">
       
-      {/* PAINEL ESQUERDO: Mesma identidade visual do Login */}
+      {/* PAINEL ESQUERDO: Identidade Visual */}
       <div className="lg:col-span-5 bg-[#12305B] text-white p-8 lg:p-12 flex flex-col justify-between relative overflow-hidden">
         <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#16A36A_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
 
@@ -253,7 +318,7 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* PAINEL DIREITO: Formulário de Registo no mesmo estilo do Login */}
+      {/* PAINEL DIREITO: Formulário de Registo */}
       <div className="lg:col-span-7 bg-white p-8 lg:p-12 flex flex-col justify-between shadow-2xl z-20 overflow-y-auto">
         
         <div className="max-w-xl w-full mx-auto my-auto py-4">
@@ -266,7 +331,7 @@ export default function RegisterPage() {
           </div>
 
           {errorMessage && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded-xl font-medium">
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded-xl font-medium animate-fadeIn">
               {errorMessage}
             </div>
           )}
@@ -372,7 +437,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Senha *</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Senha (Mín. 6 dígitos) *</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400"><Lock className="w-4 h-4" /></span>
                   <input 

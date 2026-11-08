@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { 
   BarChart3, 
   Download, 
@@ -11,7 +12,6 @@ import {
   ShieldCheck,
   Calendar
 } from 'lucide-react';
-// Corrigido para 4 níveis para alcançar corretamente src/services/api.ts
 import api from '../../../../services/api';
 
 interface ReportMetrics {
@@ -71,14 +71,16 @@ export default function RelatoriosPage() {
         atendimentosHoje: entregasHojeCount,
       });
 
+      toast.success('Indicadores sincronizados com sucesso!');
     } catch (error) {
       console.error('Erro ao carregar relatórios reais:', error);
+      toast.error('Erro ao carregar indicadores do servidor.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Função para exportar os dados reais para CSV
+  // 2. Função para exportar os dados reais para CSV com Sonner
   const handleExportCSV = () => {
     setExporting(true);
     try {
@@ -100,8 +102,12 @@ export default function RelatoriosPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      toast.success('Relatório exportado com sucesso!', {
+        description: 'O arquivo CSV foi transferido para o seu computador.',
+      });
     } catch (err) {
-      alert('Erro ao exportar o relatório.');
+      toast.error('Erro ao exportar o relatório.');
     } finally {
       setExporting(false);
     }

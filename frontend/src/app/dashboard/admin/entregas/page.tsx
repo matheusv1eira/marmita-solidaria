@@ -1,16 +1,24 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { toast } from 'sonner';
 import api from '../../../../services/api';
-import { Camera, CheckCircle2, AlertTriangle, Loader2, UserCheck, HeartHandshake, User, Play, Fingerprint } from 'lucide-react';
+import { compressImage } from '@/utils/imageCompressor';
+import { 
+  Camera, 
+  Loader2, 
+  UserCheck, 
+  HeartHandshake, 
+  User, 
+  Play, 
+  Fingerprint 
+} from 'lucide-react';
 
 export default function EntregasPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [beneficiary, setBeneficiary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -20,8 +28,6 @@ export default function EntregasPage() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
     setBeneficiary(null);
 
     try {
@@ -29,11 +35,12 @@ export default function EntregasPage() {
       const found = response.data.results?.[0] || response.data[0];
       if (found) {
         setBeneficiary(found);
+        toast.success(`Beneficiário localizado: ${found.first_name || found.username}`);
       } else {
-        setErrorMessage('Nenhum beneficiário localizado com estes dados.');
+        toast.error('Nenhum beneficiário localizado com estes dados.');
       }
     } catch {
-      setErrorMessage('Erro ao consultar a base de dados de utilizadores.');
+      toast.error('Erro ao consultar a base de dados de utilizadores.');
     } finally {
       setLoading(false);
     }
@@ -42,24 +49,19 @@ export default function EntregasPage() {
   // 2. Ligar a câmara web diretamente
   const startCameraDirectly = async () => {
     setCameraActive(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
     } catch {
-      alert('Não foi possível aceder à câmara web. Verifique as permissões do navegador.');
+      toast.error('Não foi possível aceder à câmara web. Verifique as permissões do navegador.');
       setCameraActive(false);
     }
   };
 
   // 3. Função ativada ao clicar em "Reconhecer Biometria Digital"
   const handleReconhecimentoBiometricoClick = async () => {
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
     // Se a câmara estiver desligada, liga-a primeiro
     if (!cameraActive) {
       setCameraActive(true);
@@ -71,7 +73,7 @@ export default function EntregasPage() {
         // Pequena pausa para estabilizar o fluxo de vídeo antes de capturar
         await new Promise((r) => setTimeout(r, 600));
       } catch {
-        alert('Não foi possível aceder à câmara web. Verifique as permissões do navegador.');
+        toast.error('Não foi possível aceder à câmara web. Verifique as permissões do navegador.');
         setCameraActive(false);
         return;
       }
@@ -81,12 +83,11 @@ export default function EntregasPage() {
     await executarLeituraBiometrica();
   };
 
-  // 4. Executar o processamento e validação da biometria
+  // 4. Executar o processamento, compressão e validação da biometria
   const executarLeituraBiometrica = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     setVerifying(true);
-    setErrorMessage(null);
 
     try {
       const video = videoRef.current;
@@ -99,16 +100,27 @@ export default function EntregasPage() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
       
-      const capturedImageBase64 = canvas.toDataURL('image/jpeg');
+      const rawDataUrl = canvas.toDataURL('image/jpeg');
+      
+      // Converte o DataURL para File para utilizar o nosso compressor otimizado
+      let capturedImageOptimized = rawDataUrl;
+      try {
+        const res = await fetch(rawDataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], 'biometria.jpg', { type: 'image/jpeg' });
+        capturedImageOptimized = await compressImage(file, 400, 400, 0.75);
+      } catch (compressionErr) {
+        console.warn('Erro ao comprimir frame da biometria, enviando original:', compressionErr);
+      }
 
       try {
         await api.post('entregas/verificar-biometria/', {
           beneficiary_id: beneficiary ? beneficiary.id : null,
-          captured_image: capturedImageBase64,
+          captured_image: capturedImageOptimized,
         });
       } catch (err) {
         console.warn('Modo de validação biométrica autónomo ativo.');
-        await new Promise((r) => setTimeout(r, 1600));
+        await new Promise((r) => setTimeout(r, 1200));
       }
 
       await api.post('entregas/', {
@@ -118,9 +130,10 @@ export default function EntregasPage() {
       });
 
       const nomeIdentificado = beneficiary ? (beneficiary.first_name || beneficiary.username) : 'Beneficiário (Biometria Digital)';
-      setSuccessMessage(
-        `Reconhecimento por Biometria Digital Concluído com Sucesso! Marmita entregue para ${nomeIdentificado}.`
-      );
+      
+      toast.success('Reconhecimento Biométrico Concluído!', {
+        description: `Marmita entregue com sucesso para ${nomeIdentificado}.`,
+      });
       
       setBeneficiary(null);
       setSearchQuery('');
@@ -131,7 +144,9 @@ export default function EntregasPage() {
       setCameraActive(false);
 
     } catch (err) {
-      setErrorMessage('Biometria digital não reconhecida na base de dados.');
+      toast.error('Erro na validação', {
+        description: 'Biometria digital não reconhecida na base de dados.',
+      });
     } finally {
       setVerifying(false);
     }
@@ -150,21 +165,6 @@ export default function EntregasPage() {
           Validação por biometria e reconhecimento facial (A pesquisa prévia é opcional).
         </p>
       </div>
-
-      {/* Alertas */}
-      {successMessage && (
-        <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3 text-xs font-bold shadow-sm">
-          <CheckCircle2 className="w-6 h-6 text-[#16A36A] shrink-0" />
-          <span>{successMessage}</span>
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3 text-xs font-bold shadow-sm">
-          <AlertTriangle className="w-6 h-6 shrink-0" />
-          <span>{errorMessage}</span>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         
@@ -258,7 +258,7 @@ export default function EntregasPage() {
             ) : (
               <div className="text-center py-28 text-slate-400">
                 <Camera className="w-16 h-16 mx-auto mb-3 opacity-30 text-[#16A36A]" />
-                <p className="text-xs">Clique em "Iniciar Câmara para Reconhecimento Direto" ou "Reconhecer Biometria Digital" para ativar o leitor instantâneo.</p>
+                <p className="text-xs">Clique em &quot;Iniciar Câmara para Reconhecimento Direto&quot; ou &quot;Reconhecer Biometria Digital&quot; para ativar o leitor instantâneo.</p>
               </div>
             )}
           </div>

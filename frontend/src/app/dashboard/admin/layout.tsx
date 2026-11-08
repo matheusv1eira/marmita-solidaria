@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import {
+import { useUserProfile } from '@/hooks/useUserProfile';
+import UserAvatar from '@/components/UserAvatar';
+import { 
   Heart, LogOut, Users, HeartHandshake, Package, FileText, Settings, 
   LayoutDashboard, Calendar, Search
 } from 'lucide-react';
@@ -12,9 +14,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
 
-  const [userName, setUserName] = useState<string>('Administrador');
-  const [userRole, setUserRole] = useState<string>('Administrador');
-  const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  // Usando o Hook Global para obter nome, papel e foto sincronizados em tempo real
+  const { userName, userRole, userPhoto } = useUserProfile();
   const [currentDateString, setCurrentDateString] = useState<string>('');
 
   useEffect(() => {
@@ -34,25 +35,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const timer = setInterval(updateDate, 60000);
 
     const token = localStorage.getItem('access_token');
-    const role = localStorage.getItem('user_role') || 'Administrador';
-    
     if (!token) {
       router.push('/');
       return;
-    }
-
-    const storedName = localStorage.getItem('user_name') || localStorage.getItem('first_name') || 'Matheus';
-    
-    // Varre todas as chaves possíveis onde a foto do cadastro possa ter sido guardada
-    const storedPhoto = localStorage.getItem('user_photo') || 
-                        localStorage.getItem('profile_image') || 
-                        localStorage.getItem('photo') || 
-                        localStorage.getItem('foto') || '';
-    
-    if (storedName) setUserName(storedName.trim());
-    if (role) setUserRole(role);
-    if (storedPhoto && storedPhoto !== 'null' && storedPhoto !== 'undefined') {
-      setUserPhoto(storedPhoto);
     }
 
     return () => clearInterval(timer);
@@ -122,22 +107,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="pt-3 border-t border-slate-800 flex items-center justify-between px-1">
             <div className="flex items-center gap-2.5 min-w-0">
               
-              {/* Foto Real do Cadastro (Sem mostrar letra se a imagem existir) */}
-              <div className="w-9 h-9 rounded-full bg-slate-700 border-2 border-[#16A36A] flex items-center justify-center text-white text-xs font-bold overflow-hidden shrink-0">
-                {userPhoto ? (
-                  <img 
-                    src={userPhoto} 
-                    alt={userName} 
-                    className="w-full h-full object-cover" 
-                    onError={() => setUserPhoto(null)} 
-                  />
-                ) : (
-                  <span>{(userName[0] || 'U').toUpperCase()}</span>
-                )}
-              </div>
+              {/* Utilizando o componente UserAvatar reutilizável */}
+              <UserAvatar src={userPhoto} name={userName} size={36} />
 
               <div className="truncate max-w-[110px]">
-                {/* Nome Clicável que redireciona para Configurações */}
                 <Link 
                   href="/dashboard/admin/configuracoes" 
                   className="block text-xs font-bold text-white truncate hover:text-[#16A36A] transition-colors cursor-pointer"

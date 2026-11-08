@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/context/AuthContext';
+import { Toaster } from 'sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,6 +18,8 @@ export default function RootLayout({
       <body className="antialiased bg-slate-50 min-h-screen text-slate-900 selection:bg-[#16A36A] selection:text-white font-sans">
         <AuthProvider>
           {children}
+          {/* Sistema global de notificações flutuantes */}
+          <Toaster position="top-right" richColors closeButton />
         </AuthProvider>
       </body>
     </html>

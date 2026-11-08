@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Box, Plus, PackageCheck, Loader2, AlertTriangle, RefreshCw, Layers, TrendingUp, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { Box, Plus, PackageCheck, Loader2, RefreshCw, Layers, TrendingUp, X } from 'lucide-react';
 import api from '../../../../services/api';
 
 interface StockItem {
@@ -16,7 +17,6 @@ interface StockItem {
 export default function EstoquePage() {
   const [stock, setStock] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Estados do Modal
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -30,17 +30,19 @@ export default function EstoquePage() {
     fetchStockData();
   }, []);
 
-  // 1. Busca os itens reais do backend (Zerar dados mockados e manter apenas dados reais)
+  // 1. Busca os itens reais do backend
   const fetchStockData = async () => {
     try {
       setLoading(true);
-      setError(null);
       const response = await api.get('estoque/');
       const data = response.data.results || response.data;
       setStock(Array.isArray(data) ? data : []);
+      toast.success('Estoque sincronizado com sucesso!');
     } catch (err: any) {
-      // Nenhum dado fictício injetado: inicia zerado aguardando dados reais
       setStock([]);
+      toast.error('Erro ao carregar dados do estoque', {
+        description: 'Exibindo painel em modo autónomo/vazio.',
+      });
     } finally {
       setLoading(false);
     }
@@ -51,9 +53,11 @@ export default function EstoquePage() {
     e.preventDefault();
     setSubmitting(true);
     
+    const resolvedItemName = itemName.trim() || getDefaultItemName(category);
+    
     const novoItemPayload = {
       id: Date.now(),
-      item: itemName || getDefaultItemName(category),
+      item: resolvedItemName,
       category: category,
       qtd: Number(quantity),
       unidade: unit,
@@ -63,9 +67,15 @@ export default function EstoquePage() {
     try {
       const response = await api.post('estoque/', novoItemPayload);
       setStock((prev) => [response.data, ...prev]);
+      toast.success('Item adicionado ao estoque!', {
+        description: `${resolvedItemName} (${quantity} ${unit})`,
+      });
     } catch (err) {
       // Registo local caso o endpoint de escrita do Django esteja pendente
       setStock((prev) => [novoItemPayload, ...prev]);
+      toast.success('Item registado localmente!', {
+        description: `${resolvedItemName} (${quantity} ${unit})`,
+      });
     } finally {
       setSubmitting(false);
       setShowModal(false);
@@ -128,14 +138,7 @@ export default function EstoquePage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3 text-xs font-semibold">
-          <AlertTriangle className="w-5 h-5 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Cartões Resumo com Dados Reais (Zeradados por padrão) */}
+      {/* Cartões Resumo com Dados Reais */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -179,7 +182,7 @@ export default function EstoquePage() {
           </div>
         ) : stock.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs">
-            Nenhum item registado no sistema. Clique em "+ Atualizar Estoque" para adicionar dados reais.
+            Nenhum item registado no sistema. Clique em &quot;+ Atualizar Estoque&quot; para adicionar dados reais.
           </div>
         ) : (
           <table className="w-full text-left border-collapse">

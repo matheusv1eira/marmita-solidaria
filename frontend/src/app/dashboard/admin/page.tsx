@@ -2,12 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, HeartHandshake, Package, Loader2, User } from 'lucide-react';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import UserAvatar from '@/components/UserAvatar';
+import { Users, HeartHandshake, Package, Loader2, Settings } from 'lucide-react';
 
 export default function AdminRootPage() {
   const router = useRouter();
-  const [userName, setUserName] = useState('Administrador');
-  const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  
+  // Usando o nosso Hook Global para obter nome, email e foto sincronizados instantaneamente
+  const { userName, userPhoto } = useUserProfile();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,19 +19,6 @@ export default function AdminRootPage() {
       router.push('/');
       return;
     }
-
-    // Carrega o nome e a foto real do utilizador armazenadas no localStorage
-    const name = localStorage.getItem('user_name') || localStorage.getItem('first_name') || 'Administrador';
-    const photo = localStorage.getItem('profile_image') || 
-                  localStorage.getItem('user_photo') || 
-                  localStorage.getItem('photo') || 
-                  localStorage.getItem('foto') || '';
-
-    setUserName(name);
-    if (photo && photo !== 'null' && photo !== 'undefined') {
-      setUserPhoto(photo);
-    }
-
     setLoading(false);
   }, [router]);
 
@@ -43,18 +33,12 @@ export default function AdminRootPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto font-sans space-y-6">
       
-      {/* Cabeçalho de Boas-Vindas com a Foto Real do Utilizador */}
+      {/* Cabeçalho de Boas-Vindas com o UserAvatar otimizado */}
       <div className="bg-gradient-to-r from-[#0F2847] to-[#1E3A8A] rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         
         <div className="flex items-center gap-5">
-          {/* Avatar / Foto Cadastrada no Dashboard */}
-          <div className="w-16 h-16 rounded-full bg-slate-700 border-2 border-[#16A36A] overflow-hidden shrink-0 flex items-center justify-center shadow-md">
-            {userPhoto ? (
-              <img src={userPhoto} alt={userName} className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-white font-bold text-xl">{(userName[0] || 'A').toUpperCase()}</span>
-            )}
-          </div>
+          {/* Componente de Avatar otimizado que suporta Base64, URLs do Django e fallback com iniciais */}
+          <UserAvatar src={userPhoto} name={userName} size={64} className="border-4 border-[#16A36A]" />
 
           <div>
             <h2 className="text-3xl font-extrabold">Olá, {userName}!</h2>
@@ -62,9 +46,12 @@ export default function AdminRootPage() {
           </div>
         </div>
 
-        <div className="bg-white/10 px-4 py-2 rounded-xl text-xs font-bold border border-white/20">
-          Visão Geral
-        </div>
+        <button 
+          onClick={() => router.push('/dashboard/admin/configuracoes')}
+          className="bg-white/10 hover:bg-white/20 px-4 py-2.5 rounded-xl text-xs font-bold border border-white/20 flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+        >
+          <Settings className="w-4 h-4" /> Configurações
+        </button>
       </div>
 
       {/* Cartões de Acesso Rápido */}
