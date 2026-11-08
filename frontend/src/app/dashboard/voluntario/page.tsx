@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import api from '../../../services/api';
+import { useVoluntario } from '@/context/VoluntarioContext';
 import { 
   Heart, 
   LogOut, 
@@ -25,47 +25,23 @@ import {
   PackageCheck
 } from 'lucide-react';
 
-interface DeliveryRecord {
-  id: number;
-  beneficiaryName: string;
-  time: string;
-  date: string;
-  location: string;
-  status: string;
-  method: string;
-}
-
 export default function VoluntarioDashboard() {
   const router = useRouter();
   
+  // Consumindo o Contexto Global do Voluntário
+  const { pontoAtual, setPontoAtual, pontosDisponiveis, stats, history, addDelivery } = useVoluntario();
+
   const [userName, setUserName] = useState('Voluntário');
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Lista de pontos disponíveis para seleção
-  const pontosDisponiveis = [
-    'Ponto Central - Boa Vista',
-    'Ponto Norte - Casa Amarela',
-    'Unidade Móvel 01',
-    'Ponto Sul - Boa Viagem'
-  ];
-
-  const [stats, setStats] = useState({
-    entregasHoje: 0,
-    totalMes: 0,
-    pontoAtual: 'Ponto Central - Boa Vista',
-    nivelImpacto: 'Voluntário Ativo'
-  });
-
   const [isEditingPonto, setIsEditingPonto] = useState(false);
   const [searchBeneficiary, setSearchBeneficiary] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('Ponto Central - Boa Vista');
+  const [selectedLocation, setSelectedLocation] = useState(pontoAtual);
   const [marmitasQuantity, setMarmitasQuantity] = useState(1);
   const [deliveryTime, setDeliveryTime] = useState('12:00');
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  const [history, setHistory] = useState<DeliveryRecord[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -80,40 +56,34 @@ export default function VoluntarioDashboard() {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     setDeliveryTime(`${hours}:${minutes}`);
 
-    const loadUserData = () => {
-      try {
-        const rawUserData = localStorage.getItem('user_data');
-        if (rawUserData) {
-          const parsed = JSON.parse(rawUserData);
-          if (parsed.username) setUserName(parsed.username);
-          if (parsed.profile_image) setUserPhoto(parsed.profile_image);
-        } else {
-          const currentUserKey = localStorage.getItem('current_user_key');
-          if (currentUserKey) {
-            const specificPhoto = localStorage.getItem(`profile_image_${currentUserKey}`);
-            if (specificPhoto) setUserPhoto(specificPhoto);
-          }
+    try {
+      const rawUserData = localStorage.getItem('user_data');
+      if (rawUserData) {
+        const parsed = JSON.parse(rawUserData);
+        if (parsed.username) setUserName(parsed.username);
+        if (parsed.profile_image) setUserPhoto(parsed.profile_image);
+      } else {
+        const currentUserKey = localStorage.getItem('current_user_key');
+        if (currentUserKey) {
+          const specificPhoto = localStorage.getItem(`profile_image_${currentUserKey}`);
+          if (specificPhoto) setUserPhoto(specificPhoto);
         }
-
-        const savedPonto = localStorage.getItem('voluntario_ponto_atual');
-        if (savedPonto) {
-          setStats(prev => ({ ...prev, pontoAtual: savedPonto }));
-          setSelectedLocation(savedPonto);
-        }
-      } catch (e) {
-        console.error('Erro ao ler dados locais:', e);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    loadUserData();
+    } catch (e) {
+      console.error('Erro ao ler dados locais:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
+  // Sincroniza a localização selecionada com o contexto global
+  useEffect(() => {
+    setSelectedLocation(pontoAtual);
+  }, [pontoAtual]);
+
   const handlePontoChange = (novoPonto: string) => {
-    setStats(prev => ({ ...prev, pontoAtual: novoPonto }));
+    setPontoAtual(novoPonto);
     setSelectedLocation(novoPonto);
-    localStorage.setItem('voluntario_ponto_atual', novoPonto);
     setIsEditingPonto(false);
   };
 
@@ -130,28 +100,12 @@ export default function VoluntarioDashboard() {
     setSuccessMsg(null);
 
     try {
-      const newRecord: DeliveryRecord = {
-        id: Date.now(),
-        beneficiaryName: searchBeneficiary,
-        time: deliveryTime,
-        date: new Date().toLocaleDateString('pt-BR'),
-        location: selectedLocation,
-        status: 'Entregue',
-        method: 'Manual (Voluntário)'
-      };
-
-      setHistory([newRecord, ...history]);
-      
-      setStats(prev => ({
-        ...prev,
-        entregasHoje: prev.entregasHoje + marmitasQuantity,
-        totalMes: prev.totalMes + marmitasQuantity
-      }));
+      // Adiciona através do Contexto Global (atualiza estado e localStorage automaticamente)
+      addDelivery(searchBeneficiary, marmitasQuantity, 'Manual (Voluntário)');
 
       setSuccessMsg(`Marmita (${marmitasQuantity}x) confirmada com sucesso para ${searchBeneficiary}!`);
       setSearchBeneficiary('');
       setMarmitasQuantity(1);
-
     } catch (err) {
       setSuccessMsg('Erro ao registar entrega.');
     } finally {
@@ -323,7 +277,7 @@ export default function VoluntarioDashboard() {
             </div>
           </div>
 
-          {/* MÉTRICAS (COM SELETOR DE PONTO ATUAL INTERATIVO) */}
+          {/* MÉTRICAS (COM SELETOR DE PONTO ATUAL INTERATIVO GLOBAL) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
               <div className="p-3 bg-emerald-100 text-[#16A36A] rounded-xl"><Utensils className="w-6 h-6" /></div>
@@ -341,7 +295,7 @@ export default function VoluntarioDashboard() {
               </div>
             </div>
 
-            {/* CARD DE PONTO ATUAL COM OPÇÃO DE CLICAR E ESCOLHER */}
+            {/* CARD DE PONTO ATUAL GLOBAL */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative">
               <div className="p-3 bg-purple-100 text-purple-600 rounded-xl"><MapPin className="w-6 h-6" /></div>
               <div className="flex-1 min-w-0">
@@ -357,12 +311,12 @@ export default function VoluntarioDashboard() {
                 
                 {!isEditingPonto ? (
                   <h4 className="text-xs font-bold text-slate-900 truncate mt-0.5 cursor-pointer" onClick={() => setIsEditingPonto(true)} title="Clique para alterar">
-                    {stats.pontoAtual}
+                    {pontoAtual}
                   </h4>
                 ) : (
                   <select 
                     autoFocus
-                    value={stats.pontoAtual}
+                    value={pontoAtual}
                     onChange={(e) => handlePontoChange(e.target.value)}
                     onBlur={() => setIsEditingPonto(false)}
                     className="mt-1 w-full text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg p-1 focus:outline-none focus:ring-2 focus:ring-[#16A36A]"
@@ -384,7 +338,7 @@ export default function VoluntarioDashboard() {
             </div>
           </div>
 
-          {/* REGISTO & HISTÓRICO */}
+          {/* REGISTO & HISTÓRICO GLOBAL */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
             <div className="lg:col-span-5 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
